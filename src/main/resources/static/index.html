@@ -535,15 +535,15 @@
                             <p class="text-sm text-gray-500 mb-6">Mục 2, 3, 4 chỉ dành cho Admin quản lý</p>
                             <form onSubmit={(e) => {
                                 e.preventDefault();
-                                if(adminPinInput === 'admin' || adminPinInput === '123456' || adminPinInput === '1234') {
+                                if(adminPinInput === 'Nguyenthanhtin0305@') {
                                     setIsAdmin(true);
                                     setActiveTab('muc2');
                                     setAdminPinInput('');
                                 } else {
-                                    setAlert({ type: 'error', msg: 'Mã PIN không đúng! (Mặc định: 1234)' });
+                                    setAlert({ type: 'error', msg: 'Mật khẩu không chính xác' });
                                 }
                             }}>
-                                <input type="password" placeholder="Nhập mã PIN (1234)" value={adminPinInput}
+                                <input type="password" value={adminPinInput}
                                     onChange={e => setAdminPinInput(e.target.value)}
                                     class="w-full border rounded-lg p-3 text-center text-lg font-mono mb-4" autoFocus />
                                 <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-lg shadow">
