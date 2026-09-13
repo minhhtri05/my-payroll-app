@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Bảng Lương</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-slate-100 text-gray-800 antialiased">
+<div id="root"></div>
+
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+        const [activeTab, setActiveTab] = useState('muc1'); // muc1, muc2, muc3, muc4, trash, backup
+        const [isAdmin, setIsAdmin] = useState(false);
+        const [adminPinInput, setAdminPinInput] = useState('');
+
+        // Data lists
+        const [tempList, setTempList] = useState([]);      // Mục 2 (Vãng lai)
+        const [permList, setPermList] = useState([]);      // Mục 3 (Xuyên suốt)
+        const [masterList, setMasterList] = useState([]);  // Mục 4 (Tổng hợp lộn xộn)
+        const [trashList, setTrashList] = useState([]);    // Thùng rác
+
+        // Selection checkboxes
+        const [selectedTempIds, setSelectedTempIds] = useState(new Set());
+        const [selectedPermIds, setSelectedPermIds] = useState(new Set());
+        const [selectedTrashIds, setSelectedTrashIds] = useState(new Set());
+
+        // Public Form state (Mục 1)
+        const [publicForm, setPublicForm] = useState({
+            fullName: '', role: 'SUP', dob: '', idCardNumber: '',
+            idCardIssuedDate: '', idCardIssuedPlace: '', address: '',
+            taxCode: '', bankAccountNumber: '', bankInfo: '', email: '', phone: '',
+            workplace: '', totalSalary: ''
+        });
+        const [frontFile, setFrontFile] = useState(null);
+        const [backFile, setBackFile] = useState(null);
+        const [isSubmitting, setIsSubmitting] = useState(false);
+
+        // Manual Add state (Mục 3)
+        const [showManualModal, setShowManualModal] = useState(false);
+        const [manualForm, setManualForm] = useState({
+            fullName: '', role: 'SUP', dob: '', idCardNumber: '',
+            idCardIssuedDate: '', idCardIssuedPlace: '', address: '',
+            taxCode: '', bankAccountNumber: '', bankInfo: '', email: '', phone: '',
+            workplace: '', totalSalary: '', frontIdUrl: '', backIdUrl: ''
+        });
+
+        const [alert, setAlert] = useState(null);
+
+        useEffect(() => {
+            fetchTempList();
+            fetchPermList();
+            fetchTrashList();
+        }, []);
+
+        const fetchTempList = async () => {
+            try {
+                const res = await axios.get('/api/employees?type=TEMPORARY');
+                setTempList(res.data);
+            } catch (e) { console.error(e); }
+        };
+
+        const fetchPermList = async () => {
+            try {
+                const res = await axios.get('/api/employees?type=PERMANENT');
+                setPermList(res.data);
+            } catch (e) { console.error(e); }
+        };
+
+        const fetchTrashList = async () => {
+            try {
+                const res = await axios.get('/api/employees/trash');
+                setTrashList(res.data);
+            } catch (e) { console.error(e); }
+        };
+
+        // Gửi form Mục 1 (Kèm 2 file ảnh CCCD tải thẳng lên Drive)
+        const handlePublicSubmit = async (e) => {
+            e.preventDefault();
+            setIsSubmitting(true);
+            try {
+                const formData = new FormData();
+                Object.keys(publicForm).forEach(k => formData.append(k, publicForm[k]));
+                if (frontFile) formData.append('frontImage', frontFile);
+                if (backFile) formData.append('backImage', backFile);
+
+                await axios.post('/api/employees/public-submit', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                setAlert({ type: 'success', msg: 'Đã tải ảnh lên Google Drive và gửi thông tin nhận lương thành công!' });
+                setPublicForm({
+                    fullName: '', role: 'SUP', dob: '', idCardNumber: '',
+                    idCardIssuedDate: '', idCardIssuedPlace: '', address: '',
+                    taxCode: '', bankAccountNumber: '', bankInfo: '', email: '', phone: '',
+                    workplace: '', totalSalary: ''
+                });
+                setFrontFile(null);
+                setBackFile(null);
+                document.getElementById('frontImgInput').value = '';
+                document.getElementById('backImgInput').value = '';
+                fetchTempList();
+            } catch (err) {
+                let errorMsg = 'Gửi thông tin thất bại!';
+                if (err.response && err.response.data) {
+                    errorMsg = typeof err.response.data === 'string' ? err.response.data : (err.response.data.message || JSON.stringify(err.response.data));
+                }
+                setAlert({ type: 'error', msg: errorMsg });
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
+
+        // Thêm tay Mục 3
+        const handleManualSubmit = async (e) => {
+            e.preventDefault();
+            try {
+                await axios.post('/api/employees/manual', manualForm);
+                setAlert({ type: 'success', msg: 'Thêm mới nhân sự thành công!' });
+                setShowManualModal(false);
+                fetchPermList();
+            } catch (err) {
+                setAlert({ type: 'error', msg: 'Thêm thất bại: ' + err.message });
+            }
+        };
+
+        // Upload Excel Mục 3
+        const handleUploadExcel = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await axios.post('/api/employees/import-excel', formData);
+                setAlert({ type: 'success', msg: res.data.message });
+                fetchPermList();
+            } catch (err) {
+                setAlert({ type: 'error', msg: 'Lỗi import: ' + err.message });
+            }
+        };
+
+        // Xóa mềm (Vào Thùng Rác)
+        const handleSoftDelete = async (selectedIds, typeName, refreshFunc, setSelectFunc) => {
+            if (selectedIds.size === 0) return;
+            if (!window.confirm(`Chuyển ${selectedIds.size} nhân sự đã chọn vào Thùng rác? (Bạn có thể khôi phục lại bất kỳ lúc nào)`)) return;
+            try {
+                const res = await axios.post('/api/employees/soft-delete', Array.from(selectedIds));
+                setAlert({ type: 'success', msg: res.data });
+                setSelectFunc(new Set());
+                refreshFunc();
+                fetchTrashList();
+            } catch (err) { setAlert({ type: 'error', msg: 'Lỗi: ' + err.message }); }
+        };
+
+        // Khôi phục từ Thùng Rác
+        const handleRestore = async () => {
+            if (selectedTrashIds.size === 0) return;
+            try {
+                const res = await axios.post('/api/employees/restore', Array.from(selectedTrashIds));
+                setAlert({ type: 'success', msg: res.data });
+                setSelectedTrashIds(new Set());
+                fetchTrashList();
+                fetchTempList();
+                fetchPermList();
+            } catch (err) { setAlert({ type: 'error', msg: err.message }); }
+        };
+
+        // Xóa vĩnh viễn khỏi DB
+        const handleHardDelete = async () => {
+            if (selectedTrashIds.size === 0) return;
+            if (!window.confirm(`Hành động này không thể hoàn tác! Bạn có CHẮC CHẮN muốn XÓA VĨNH VIỄN ${selectedTrashIds.size} nhân sự?`)) return;
+            try {
+                const res = await axios.post('/api/employees/hard-delete', Array.from(selectedTrashIds));
+                setAlert({ type: 'success', msg: res.data });
+                setSelectedTrashIds(new Set());
+                fetchTrashList();
+            } catch (err) { setAlert({ type: 'error', msg: err.message }); }
+        };
+
+        // Phục hồi từ file Backup
+        const handleRestoreBackup = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await axios.post('/api/employees/restore-backup', formData);
+                setAlert({ type: 'success', msg: res.data.message });
+                fetchPermList();
+                fetchTempList();
+            } catch (err) { setAlert({ type: 'error', msg: 'Lỗi phục hồi: ' + err.message }); }
+        };
+
+        // Đưa vào Mục 4
+        const addToMaster = (sourceList, selectedIds) => {
+            const toAdd = sourceList.filter(item => selectedIds.has(item.id));
+            const currentIds = new Set(masterList.map(m => m.id));
+            const newItems = toAdd.filter(item => !currentIds.has(item.id));
+            setMasterList([...masterList, ...newItems]);
+            setAlert({ type: 'success', msg: `Đã đưa ${newItems.length} nhân sự vào Mục 4!` });
+        };
+
+        // Di chuyển dòng Mục 4
+        const moveRow = (index, direction) => {
+            const newList = [...masterList];
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= newList.length) return;
+            const temp = newList[index];
+            newList[index] = newList[targetIndex];
+            newList[targetIndex] = temp;
+            setMasterList(newList);
+        };
+
+        // Trộn ngẫu nhiên Mục 4
+        const shuffleMaster = () => {
+            setMasterList([...masterList].sort(() => Math.random() - 0.5));
+            setAlert({ type: 'success', msg: 'Đã xáo trộn ngẫu nhiên vị trí các dòng!' });
+        };
+
+        // Xuất Excel: isFull = false (12 cột), isFull = true (16 cột)
+        const exportExcel = async (listToExport, isFull = false) => {
+            if (listToExport.length === 0) {
+                setAlert({ type: 'error', msg: 'Danh sách xuất trống!' });
+                return;
+            }
+            try {
+                const res = await axios.post(`/api/employees/export-custom?isFull=${isFull}`, listToExport, { responseType: 'blob' });
+                const filename = isFull ? 'Bang_Luong_Chi_Tiet_16_Cot.xlsx' : 'Bang_Luong_Chuan_12_Cot.xlsx';
+                const url = window.URL.createObjectURL(new Blob([res.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            } catch (err) {
+                setAlert({ type: 'error', msg: 'Lỗi khi xuất file Excel!' });
+            }
+        };
+
+        // Checkbox helpers
+        const toggleSelectAll = (list, selectedSet, setFunc) => {
+            if (selectedSet.size === list.length) setFunc(new Set());
+            else setFunc(new Set(list.map(i => i.id)));
+        };
+
+        const toggleSelectItem = (id, selectedSet, setFunc) => {
+            const next = new Set(selectedSet);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            setFunc(next);
+        };
+
+        // Bảng render dữ liệu
+        const renderTable = (items, selectedSet, setFunc, isMasterTab = false, isFull = false) => (
+            <div class="overflow-x-auto border rounded-xl shadow-sm bg-white">
+                <table class="min-w-full divide-y divide-gray-200 text-xs text-left">
+                    <thead class="bg-gray-100 text-gray-700 font-bold sticky top-0">
+                        <tr>
+                            {setFunc && (
+                                <th class="p-3">
+                                    <input type="checkbox" title="Chọn tất cả"
+                                        checked={items.length > 0 && selectedSet.size === items.length}
+                                        onChange={() => toggleSelectAll(items, selectedSet, setFunc)} />
+                                </th>
+                            )}
+                            {isMasterTab && <th class="p-3 text-center">Đổi Vị Trí</th>}
+                            <th class="p-3 whitespace-nowrap">1. Họ Và Tên</th>
+                            <th class="p-3 whitespace-nowrap">2. Chức Vụ</th>
+                            <th class="p-3 whitespace-nowrap">3. Ngày Sinh</th>
+                            <th class="p-3 whitespace-nowrap">4. Số CCCD</th>
+                            <th class="p-3 whitespace-nowrap">5. Ngày Cấp</th>
+                            <th class="p-3 whitespace-nowrap">6. Nơi Cấp</th>
+                            <th class="p-3 whitespace-nowrap min-w-[200px]">7. Địa Chỉ (Trên CCCD)</th>
+                            <th class="p-3 whitespace-nowrap">8. Mã Số Thuế</th>
+                            <th class="p-3 whitespace-nowrap">9. Số TK</th>
+                            <th class="p-3 whitespace-nowrap">10. Ngân Hàng, Chi Nhánh</th>
+                            <th class="p-3 whitespace-nowrap">11. Mail</th>
+                            <th class="p-3 whitespace-nowrap">12. Số Điện Thoại</th>
+                            {isFull && (
+                                <React.Fragment>
+                                    <th class="p-3 whitespace-nowrap bg-amber-50">13. Nơi Làm Việc</th>
+                                    <th class="p-3 whitespace-nowrap bg-amber-50">14. Tổng Lương</th>
+                                    <th class="p-3 whitespace-nowrap bg-amber-50 text-center">15. Mặt Trước</th>
+                                    <th class="p-3 whitespace-nowrap bg-amber-50 text-center">16. Mặt Sau</th>
+                                </React.Fragment>
+                            )}
+                            {isMasterTab && <th class="p-3 text-center">Xóa</th>}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {items.map((emp, idx) => (
+                            <tr key={emp.id || idx} class="hover:bg-indigo-50/40 transition">
+                                {setFunc && (
+                                    <td class="p-3">
+                                        <input type="checkbox"
+                                            checked={selectedSet.has(emp.id)}
+                                            onChange={() => toggleSelectItem(emp.id, selectedSet, setFunc)} />
+                                    </td>
+                                )}
+                                {isMasterTab && (
+                                    <td class="p-3 text-center space-x-1 whitespace-nowrap">
+                                        <button onClick={() => moveRow(idx, -1)} disabled={idx === 0}
+                                            class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-30">⬆️</button>
+                                        <button onClick={() => moveRow(idx, 1)} disabled={idx === items.length - 1}
+                                            class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-30">⬇️</button>
+                                    </td>
+                                )}
+                                <td class="p-3 font-semibold text-gray-900 whitespace-nowrap">{emp.fullName}</td>
+                                <td class="p-3 whitespace-nowrap"><span class="px-2 py-0.5 bg-gray-100 rounded text-gray-600">{emp.role}</span></td>
+                                <td class="p-3 whitespace-nowrap">{emp.dob}</td>
+                                <td class="p-3 font-mono font-bold text-indigo-700 whitespace-nowrap">{emp.idCardNumber}</td>
+                                <td class="p-3 whitespace-nowrap">{emp.idCardIssuedDate}</td>
+                                <td class="p-3 whitespace-nowrap">{emp.idCardIssuedPlace}</td>
+                                <td class="p-3 max-w-xs truncate" title={emp.address}>{emp.address}</td>
+                                <td class="p-3 font-mono whitespace-nowrap">{emp.taxCode}</td>
+                                <td class="p-3 font-mono font-semibold text-emerald-700 whitespace-nowrap">{emp.bankAccountNumber}</td>
+                                <td class="p-3 whitespace-nowrap">{emp.bankInfo}</td>
+                                <td class="p-3 whitespace-nowrap">{emp.email}</td>
+                                <td class="p-3 whitespace-nowrap font-mono">{emp.phone}</td>
+                                {isFull && (
+                                    <React.Fragment>
+                                        <td class="p-3 whitespace-nowrap bg-amber-50/50 text-gray-800 font-medium">{emp.workplace || '-'}</td>
+                                        <td class="p-3 whitespace-nowrap bg-amber-50/50 font-bold text-emerald-700">{emp.totalSalary || '-'}</td>
+                                        <td class="p-3 whitespace-nowrap bg-amber-50/50 text-center">
+                                            {emp.frontIdUrl ? (
+                                                <a href={emp.frontIdUrl} target="_blank" class="text-indigo-600 underline font-semibold">Xem ảnh</a>
+                                            ) : '-'}
+                                        </td>
+                                        <td class="p-3 whitespace-nowrap bg-amber-50/50 text-center">
+                                            {emp.backIdUrl ? (
+                                                <a href={emp.backIdUrl} target="_blank" class="text-indigo-600 underline font-semibold">Xem ảnh</a>
+                                            ) : '-'}
+                                        </td>
+                                    </React.Fragment>
+                                )}
+                                {isMasterTab && (
+                                    <td class="p-3 text-center">
+                                        <button onClick={() => setMasterList(masterList.filter((_, i) => i !== idx))}
+                                            class="text-red-500 hover:text-red-700 font-bold">✕</button>
+                                    </td>
+                                )}
+                            </tr>
+                        ))}
+                        {items.length === 0 && (
+                            <tr><td colspan="18" class="p-8 text-center text-gray-400">Chưa có dữ liệu nào.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        );
+
+        return (
+            <div class="min-h-screen flex flex-col">
+                {/* Header */}
+                <header class="bg-indigo-900 text-white shadow-md">
+                    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-2">
+                        <div>
+                            <h1 class="text-xl font-bold">Hệ Thống Quản Lý Nhận Lương Proxy</h1>
+                            <p class="text-xs text-indigo-300">Quản lý Vãng lai, Xuyên suốt, Thùng rác & Backup</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onClick={() => setActiveTab('muc1')}
+                                class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'muc1' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-800 text-gray-300'}`}>
+                                🌐 MỤC 1: Form Điền Nhận Lương (Public)
+                            </button>
+
+                            <button onClick={() => { if(!isAdmin) setActiveTab('login'); else setActiveTab('muc2'); }}
+                                class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'muc2' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-800 text-gray-300'}`}>
+                                🔒 MỤC 2: Vãng Lai ({tempList.length})
+                            </button>
+
+                            <button onClick={() => { if(!isAdmin) setActiveTab('login'); else setActiveTab('muc3'); }}
+                                class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'muc3' ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-800 text-gray-300'}`}>
+                                🔒 MỤC 3: Xuyên Suốt ({permList.length})
+                            </button>
+
+                            <button onClick={() => { if(!isAdmin) setActiveTab('login'); else setActiveTab('muc4'); }}
+                                class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'muc4' ? 'bg-amber-500 text-white shadow' : 'bg-amber-600/60 hover:bg-amber-600 text-white'}`}>
+                                ⭐ MỤC 4: Tổng Hợp ({masterList.length})
+                            </button>
+
+                            {isAdmin && (
+                                <React.Fragment>
+                                    <button onClick={() => setActiveTab('trash')}
+                                        class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'trash' ? 'bg-rose-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                                        🗑️ Thùng Rác ({trashList.length})
+                                    </button>
+                                    <button onClick={() => setActiveTab('backup')}
+                                        class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'backup' ? 'bg-teal-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                                        💾 Backup & Restore
+                                    </button>
+                                    <button onClick={() => setIsAdmin(false)} class="text-xs bg-red-800 hover:bg-red-700 px-2.5 py-1.5 rounded text-white ml-2">
+                                        Thoát
+                                    </button>
+                                </React.Fragment>
+                            )}
+                        </div>
+                    </div>
+                </header>
+
+                {/* Alert Toast */}
+                {alert && (
+                    <div class="max-w-7xl mx-auto px-4 mt-3 w-full">
+                        <div class={`p-3 rounded-lg flex justify-between items-center text-sm shadow ${alert.type === 'error' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' : 'bg-emerald-100 text-emerald-800 border-l-4 border-emerald-500'}`}>
+                            <span>{alert.msg}</span>
+                            <button onClick={() => setAlert(null)} class="font-bold ml-4">✕</button>
+                        </div>
+                    </div>
+                )}
+
+                <main class="max-w-7xl mx-auto px-4 py-5 flex-1 w-full">
+                    {/* MỤC 1: PUBLIC FORM */}
+                    {activeTab === 'muc1' && (
+                        <div class="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200">
+                            <div class="border-b pb-4 mb-6">
+                                <span class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded">Mục 1</span>
+                                <h2 class="text-2xl font-bold text-gray-800 mt-2">Biểu Mẫu Nhập Thông Tin Nhận Lương</h2>
+                                <p class="text-sm text-gray-500 mt-1">Dành cho nhân viên tham gia chương trình. Vui lòng điền đúng thông tin theo CCCD và tải ảnh mặt trước/sau.</p>
+                            </div>
+                            <form onSubmit={handlePublicSubmit} class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <label class="block font-semibold mb-1">1. Họ và tên *</label>
+                                    <input type="text" required placeholder="Nguyễn Văn A" value={publicForm.fullName}
+                                        onChange={e => setPublicForm({...publicForm, fullName: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">2. Chức vụ *</label>
+                                    <select value={publicForm.role} onChange={e => setPublicForm({...publicForm, role: e.target.value})}
+                                        class="w-full border rounded-lg p-2.5 bg-white">
+                                        <option value="SUP">SUP</option>
+                                        <option value="PG">PG</option>
+                                        <option value="PB">PB</option>
+                                        <option value="STAFF">STAFF</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">3. Ngày sinh *</label>
+                                    <input type="text" required placeholder="03/05/2005" value={publicForm.dob}
+                                        onChange={e => setPublicForm({...publicForm, dob: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">4. Số CCCD (12 số) *</label>
+                                    <input type="text" required placeholder="080205014873" value={publicForm.idCardNumber}
+                                        onChange={e => setPublicForm({...publicForm, idCardNumber: e.target.value})} class="w-full border rounded-lg p-2.5 font-mono" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">5. Ngày cấp CCCD *</label>
+                                    <input type="text" required placeholder="13/10/2021" value={publicForm.idCardIssuedDate}
+                                        onChange={e => setPublicForm({...publicForm, idCardIssuedDate: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">6. Nơi cấp CCCD *</label>
+                                    <input type="text" required placeholder="Cục CS QLHC và TTXH" value={publicForm.idCardIssuedPlace}
+                                        onChange={e => setPublicForm({...publicForm, idCardIssuedPlace: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="block font-semibold mb-1">7. Địa chỉ trên CCCD *</label>
+                                    <input type="text" required placeholder="Số nhà, đường, xã/phường, tỉnh/thành" value={publicForm.address}
+                                        onChange={e => setPublicForm({...publicForm, address: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">8. Mã số thuế</label>
+                                    <input type="text" placeholder="080205014873" value={publicForm.taxCode}
+                                        onChange={e => setPublicForm({...publicForm, taxCode: e.target.value})} class="w-full border rounded-lg p-2.5 font-mono" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">9. Số tài khoản ngân hàng *</label>
+                                    <input type="text" required placeholder="9378580393" value={publicForm.bankAccountNumber}
+                                        onChange={e => setPublicForm({...publicForm, bankAccountNumber: e.target.value})} class="w-full border rounded-lg p-2.5 font-mono" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">10. Ngân hàng & Chi nhánh *</label>
+                                    <input type="text" required placeholder="Vietcombank - Tây Sài Gòn" value={publicForm.bankInfo}
+                                        onChange={e => setPublicForm({...publicForm, bankInfo: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">11. Email *</label>
+                                    <input type="email" required placeholder="example@gmail.com" value={publicForm.email}
+                                        onChange={e => setPublicForm({...publicForm, email: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">12. Số điện thoại *</label>
+                                    <input type="text" required placeholder="0901234567" value={publicForm.phone}
+                                        onChange={e => setPublicForm({...publicForm, phone: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+
+                                {/* 4 MỤC BỔ SUNG CHO VÃNG LAI */}
+                                <div>
+                                    <label class="block font-semibold mb-1">13. Nơi làm việc (Cửa hàng / Mall)</label>
+                                    <input type="text" placeholder="Ví dụ: Haidilao - Vạn Hạnh Mall" value={publicForm.workplace}
+                                        onChange={e => setPublicForm({...publicForm, workplace: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">14. Tổng lương</label>
+                                    <input type="text" placeholder="Ví dụ: 1.720.000" value={publicForm.totalSalary}
+                                        onChange={e => setPublicForm({...publicForm, totalSalary: e.target.value})} class="w-full border rounded-lg p-2.5" />
+                                </div>
+
+                                {/* CHỌN FILE ẢNH TRỰC TIẾP */}
+                                <div>
+                                    <label class="block font-semibold mb-1">15. Tải Ảnh Mặt Trước CCCD *</label>
+                                    <input type="file" accept="image/*" required id="frontImgInput"
+                                        onChange={e => setFrontFile(e.target.files[0])}
+                                        class="w-full border rounded-lg p-2 bg-white text-xs cursor-pointer" />
+                                </div>
+                                <div>
+                                    <label class="block font-semibold mb-1">16. Tải Ảnh Mặt Sau CCCD *</label>
+                                    <input type="file" accept="image/*" required id="backImgInput"
+                                        onChange={e => setBackFile(e.target.files[0])}
+                                        class="w-full border rounded-lg p-2 bg-white text-xs cursor-pointer" />
+                                </div>
+
+                                <div class="sm:col-span-2 mt-4">
+                                    <button type="submit" disabled={isSubmitting}
+                                        class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-3.5 rounded-xl shadow transition text-base">
+                                        {isSubmitting ? '⏳ Đang tải ảnh lên Google Drive & Gửi thông tin...' : 'Xác Nhận & Gửi Thông Tin Nhận Lương'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* ADMIN AUTH CHECK */}
+                    {activeTab === 'login' && !isAdmin && (
+                        <div class="max-w-md mx-auto bg-white p-8 rounded-2xl shadow-sm border text-center">
+                            <h2 class="text-xl font-bold mb-2">Đăng Nhập Quản Trị (Admin)</h2>
+                            <p class="text-sm text-gray-500 mb-6">Mục 2, 3, 4 chỉ dành cho Admin quản lý</p>
+                            <form onSubmit={(e) => {
+                                e.preventDefault();
+                                if(adminPinInput === 'admin' || adminPinInput === '123456' || adminPinInput === '1234') {
+                                    setIsAdmin(true);
+                                    setActiveTab('muc2');
+                                    setAdminPinInput('');
+                                } else {
+                                    setAlert({ type: 'error', msg: 'Mã PIN không đúng! (Mặc định: 1234)' });
+                                }
+                            }}>
+                                <input type="password" placeholder="Nhập mã PIN (1234)" value={adminPinInput}
+                                    onChange={e => setAdminPinInput(e.target.value)}
+                                    class="w-full border rounded-lg p-3 text-center text-lg font-mono mb-4" autoFocus />
+                                <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-lg shadow">
+                                    Mở Khóa Quản Trị
+                                </button>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* MỤC 2: DANH SÁCH VÃNG LAI */}
+                    {activeTab === 'muc2' && isAdmin && (
+                        <div class="space-y-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
+                                <div>
+                                    <h2 class="text-lg font-bold">MỤC 2: Danh Sách Vãng Lai Đã Điền Form ({tempList.length})</h2>
+                                    <p class="text-xs text-gray-500">Hiển thị đầy đủ thông tin kèm nơi làm việc & link ảnh Google Drive</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button onClick={() => {
+                                        const selected = tempList.filter(t => selectedTempIds.has(t.id));
+                                        exportExcel(selected.length > 0 ? selected : tempList, false);
+                                    }} class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
+                                        📥 Xuất Excel Chuẩn (12 Cột)
+                                    </button>
+                                    <button onClick={() => {
+                                        const selected = tempList.filter(t => selectedTempIds.has(t.id));
+                                        exportExcel(selected.length > 0 ? selected : tempList, true);
+                                    }} class="bg-teal-700 hover:bg-teal-800 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
+                                        📑 Xuất Excel Đầy Đủ (16 Cột + Ảnh)
+                                    </button>
+                                    <button onClick={() => addToMaster(tempList, selectedTempIds)}
+                                        disabled={selectedTempIds.size === 0}
+                                        class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
+                                        ➕ Đưa Vào Mục 4 ({selectedTempIds.size})
+                                    </button>
+                                    <button onClick={() => handleSoftDelete(selectedTempIds, 'Vãng Lai', fetchTempList, setSelectedTempIds)}
+                                        disabled={selectedTempIds.size === 0}
+                                        class="bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-bold px-3 py-2 rounded-lg text-xs shadow">
+                                        🗑️ Xóa ({selectedTempIds.size})
+                                    </button>
+                                </div>
+                            </div>
+                            {renderTable(tempList, selectedTempIds, setSelectedTempIds, false, true)}
+                        </div>
+                    )}
+
+                    {/* MỤC 3: DANH SÁCH XUYÊN SUỐT */}
+                    {activeTab === 'muc3' && isAdmin && (
+                        <div class="space-y-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
+                                <div>
+                                    <h2 class="text-lg font-bold">MỤC 3: Danh Sách Xuyên Suốt - Master Data ({permList.length})</h2>
+                                    <p class="text-xs text-gray-500">Nhân sự cố định, hiển thị đầy đủ 12 cột chuẩn</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <label class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow cursor-pointer">
+                                        📥 Import File Excel
+                                        <input type="file" accept=".xlsx" onChange={handleUploadExcel} class="hidden" />
+                                    </label>
+                                    <button onClick={() => setShowManualModal(true)}
+                                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
+                                        ➕ Thêm Tay
+                                    </button>
+                                    <button onClick={() => {
+                                        const selected = permList.filter(p => selectedPermIds.has(p.id));
+                                        exportExcel(selected.length > 0 ? selected : permList, false);
+                                    }} class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
+                                        📥 Xuất Excel (12 Cột)
+                                    </button>
+                                    <button onClick={() => addToMaster(permList, selectedPermIds)}
+                                        disabled={selectedPermIds.size === 0}
+                                        class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
+                                        ➕ Đưa Vào Mục 4 ({selectedPermIds.size})
+                                    </button>
+                                    <button onClick={() => handleSoftDelete(selectedPermIds, 'Xuyên Suốt', fetchPermList, setSelectedPermIds)}
+                                        disabled={selectedPermIds.size === 0}
+                                        class="bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-bold px-3 py-2 rounded-lg text-xs shadow">
+                                        🗑️ Xóa ({selectedPermIds.size})
+                                    </button>
+                                </div>
+                            </div>
+                            {renderTable(permList, selectedPermIds, setSelectedPermIds, false, false)}
+                        </div>
+                    )}
+
+                    {/* MỤC 4: DANH SÁCH TỔNG HỢP & SẮP XẾP LỘN XỘN */}
+                    {activeTab === 'muc4' && isAdmin && (
+                        <div class="space-y-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
+                                <div>
+                                    <h2 class="text-lg font-bold text-amber-900">MỤC 4: Danh Sách Bảng Lương Tổng Hợp ({masterList.length})</h2>
+                                    <p class="text-xs text-gray-500">Tập hợp từ Mục 2 & Mục 3. Bạn có thể sắp xếp lộn xộn vị trí dòng tùy ý trước khi xuất Excel.</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button onClick={shuffleMaster} disabled={masterList.length === 0}
+                                        class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow disabled:opacity-40">
+                                        🔀 Trộn Ngẫu Nhiên (Shuffle)
+                                    </button>
+                                    <button onClick={() => exportExcel(masterList, false)} disabled={masterList.length === 0}
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow disabled:opacity-40">
+                                        📥 Xuất Excel Chuẩn (12 Cột)
+                                    </button>
+                                    <button onClick={() => exportExcel(masterList, true)} disabled={masterList.length === 0}
+                                        class="bg-teal-700 hover:bg-teal-800 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow disabled:opacity-40">
+                                        📑 Xuất Excel Đầy Đủ (16 Cột)
+                                    </button>
+                                    <button onClick={() => { if(window.confirm('Dọn sạch Mục 4?')) setMasterList([]); }}
+                                        disabled={masterList.length === 0}
+                                        class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-3 py-2 rounded-lg text-xs disabled:opacity-40">
+                                        Dọn Sạch
+                                    </button>
+                                </div>
+                            </div>
+                            {renderTable(masterList, null, null, true, true)}
+                        </div>
+                    )}
+
+                    {/* TAB THÙNG RÁC */}
+                    {activeTab === 'trash' && isAdmin && (
+                        <div class="space-y-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
+                                <div>
+                                    <h2 class="text-lg font-bold text-rose-800">🗑️ Thùng Rác (Đã Xóa Mềm - {trashList.length})</h2>
+                                    <p class="text-xs text-gray-500">Các nhân sự xóa nhầm nằm ở đây. Bạn có thể khôi phục lại nguyên vẹn.</p>
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button onClick={handleRestore} disabled={selectedTrashIds.size === 0}
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-xs shadow disabled:opacity-40">
+                                        ♻️ Khôi Phục ({selectedTrashIds.size})
+                                    </button>
+                                    <button onClick={handleHardDelete} disabled={selectedTrashIds.size === 0}
+                                        class="bg-red-700 hover:bg-red-800 text-white font-bold px-4 py-2 rounded-lg text-xs shadow disabled:opacity-40">
+                                        🔥 Xóa Vĩnh Viễn ({selectedTrashIds.size})
+                                    </button>
+                                </div>
+                            </div>
+                            {renderTable(trashList, selectedTrashIds, setSelectedTrashIds, false, true)}
+                        </div>
+                    )}
+
+                    {/* TAB BACKUP & RESTORE */}
+                    {activeTab === 'backup' && isAdmin && (
+                        <div class="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border space-y-6">
+                            <div class="border-b pb-3">
+                                <h2 class="text-xl font-bold text-gray-800">💾 Sao Lưu & Phục Hồi Dữ Liệu</h2>
+                                <p class="text-sm text-gray-500">Sao lưu ra file Excel 16 cột đầy đủ, mở xem được bằng Excel</p>
+                            </div>
+                            <div class="space-y-4">
+                                <div class="p-4 border rounded-xl bg-slate-50 flex justify-between items-center">
+                                    <div>
+                                        <h4 class="font-bold text-gray-800">1. Tải File Sao Lưu Toàn Bộ (Backup)</h4>
+                                        <p class="text-xs text-gray-500">Tải file `Payroll_Backup_All_16_Cot.xlsx` lưu vào máy/Drive</p>
+                                    </div>
+                                    <a href="/api/employees/backup" target="_blank"
+                                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs shadow inline-block">
+                                        ⬇️ Tải File Sao Lưu
+                                    </a>
+                                </div>
+                                <div class="p-4 border rounded-xl bg-slate-50 flex justify-between items-center">
+                                    <div>
+                                        <h4 class="font-bold text-gray-800">2. Phục Hồi Từ File Sao Lưu (Restore)</h4>
+                                        <p class="text-xs text-gray-500">Chọn file Excel backup đã tải để nạp lại vào Database</p>
+                                    </div>
+                                    <label class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-lg text-xs shadow cursor-pointer">
+                                        ⬆️ Chọn File Phục Hồi
+                                        <input type="file" accept=".xlsx" onChange={handleRestoreBackup} class="hidden" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </main>
+
+                {/* Modal Thêm tay Mục 3 */}
+                {showManualModal && (
+                    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                                <h3 class="font-bold text-lg">Thêm Tay Nhân Sự Xuyên Suốt (Mục 3)</h3>
+                                <button onClick={() => setShowManualModal(false)} class="text-gray-400 font-bold text-xl">✕</button>
+                            </div>
+                            <form onSubmit={handleManualSubmit} class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                <div>
+                                    <label class="font-semibold block mb-1">1. Họ và tên *</label>
+                                    <input type="text" required value={manualForm.fullName}
+                                        onChange={e => setManualForm({...manualForm, fullName: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">2. Chức vụ *</label>
+                                    <select value={manualForm.role} onChange={e => setManualForm({...manualForm, role: e.target.value})} class="w-full border rounded p-2 bg-white">
+                                        <option value="SUP">SUP</option>
+                                        <option value="PG">PG</option>
+                                        <option value="PB">PB</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">3. Ngày sinh *</label>
+                                    <input type="text" required value={manualForm.dob} placeholder="03/05/2005"
+                                        onChange={e => setManualForm({...manualForm, dob: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">4. Số CCCD *</label>
+                                    <input type="text" required value={manualForm.idCardNumber}
+                                        onChange={e => setManualForm({...manualForm, idCardNumber: e.target.value})} class="w-full border rounded p-2 font-mono" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">5. Ngày cấp CCCD *</label>
+                                    <input type="text" required value={manualForm.idCardIssuedDate}
+                                        onChange={e => setManualForm({...manualForm, idCardIssuedDate: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">6. Nơi cấp CCCD *</label>
+                                    <input type="text" required value={manualForm.idCardIssuedPlace}
+                                        onChange={e => setManualForm({...manualForm, idCardIssuedPlace: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="font-semibold block mb-1">7. Địa chỉ trên CCCD *</label>
+                                    <input type="text" required value={manualForm.address}
+                                        onChange={e => setManualForm({...manualForm, address: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">8. Mã số thuế</label>
+                                    <input type="text" value={manualForm.taxCode}
+                                        onChange={e => setManualForm({...manualForm, taxCode: e.target.value})} class="w-full border rounded p-2 font-mono" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">9. Số TK *</label>
+                                    <input type="text" required value={manualForm.bankAccountNumber}
+                                        onChange={e => setManualForm({...manualForm, bankAccountNumber: e.target.value})} class="w-full border rounded p-2 font-mono" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">10. Ngân hàng & Chi nhánh *</label>
+                                    <input type="text" required value={manualForm.bankInfo} placeholder="Vietcombank - Tây Sài Gòn"
+                                        onChange={e => setManualForm({...manualForm, bankInfo: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">11. Email</label>
+                                    <input type="email" value={manualForm.email}
+                                        onChange={e => setManualForm({...manualForm, email: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div>
+                                    <label class="font-semibold block mb-1">12. Số điện thoại *</label>
+                                    <input type="text" required value={manualForm.phone}
+                                        onChange={e => setManualForm({...manualForm, phone: e.target.value})} class="w-full border rounded p-2" />
+                                </div>
+                                <div class="sm:col-span-2 mt-4 flex justify-end space-x-2">
+                                    <button type="button" onClick={() => setShowManualModal(false)} class="px-4 py-2 border rounded">Hủy</button>
+                                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded shadow">Lưu Nhân Sự</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
