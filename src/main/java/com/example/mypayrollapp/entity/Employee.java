@@ -38,11 +38,11 @@ public class Employee {
 
     @Nationalized
     @Column(length = 255)
-    private String idCardIssuedPlace; // 6. Nơi Cấp
+    private String idCardIssuedPlace; // 6. Nơi Cấp (BỘ CÔNG AN / Cục CS QLHC và TTXH)
 
     @Nationalized
     @Column(columnDefinition = "NVARCHAR(MAX)")
-    private String address; // 7. Địa Chỉ
+    private String address; // 7. Địa Chỉ (Trên CCCD)
 
     @Column(length = 50)
     private String taxCode; // 8. Mã Số Thuế
@@ -51,8 +51,16 @@ public class Employee {
     private String bankAccountNumber; // 9. Số TK
 
     @Nationalized
+    @Column(length = 150)
+    private String bankName; // Tên ngân hàng tách riêng
+
+    @Nationalized
+    @Column(length = 150)
+    private String bankBranch; // Chi nhánh tách riêng
+
+    @Nationalized
     @Column(nullable = false, length = 255)
-    private String bankInfo; // 10. Ngân Hàng, Chi Nhánh
+    private String bankInfo; // 10. Ngân Hàng, Chi Nhánh (ghép tự động để xuất file)
 
     @Column(length = 150)
     private String email; // 11. Mail
@@ -60,14 +68,13 @@ public class Employee {
     @Column(length = 50)
     private String phone; // 12. Số Điện Thoại
 
-    // 4 trường bổ sung cho Vãng lai
     @Nationalized
     @Column(length = 255)
-    private String workplace; // 13. Nơi Làm Việc (Cửa hàng / Điểm chạy)
+    private String workplace; // 13. Nơi Làm Việc (Cửa hàng / Mall)
 
     @Nationalized
     @Column(length = 100)
-    private String totalSalary; // 14. Tổng Tiền Lương Của Team
+    private String totalSalary; // 14. Tổng Tiền Lương
 
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String frontIdUrl; // 15. Ảnh Mặt Trước CCCD
@@ -75,10 +82,14 @@ public class Employee {
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String backIdUrl; // 16. Ảnh Mặt Sau CCCD
 
+    @Nationalized
+    @Column(columnDefinition = "NVARCHAR(MAX)")
+    private String note; // Ghi chú (Note)
+
     @Column(length = 20)
     @Builder.Default
     private String employeeType = "PERMANENT"; // PERMANENT hoặc TEMPORARY
 
     @Builder.Default
-    private Boolean isActive = true; // true: Đang hoạt động, false: Đã xóa mềm (trong Thùng rác)
+    private Boolean isActive = true;
 }

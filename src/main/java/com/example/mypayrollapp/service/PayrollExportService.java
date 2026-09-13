@@ -37,7 +37,7 @@ public class PayrollExportService {
         return exportCustomEmployeeList(new ArrayList<>(unique.values()), false);
     }
 
-    // Xuất Excel: isFullMode = false (12 cột chuẩn), isFullMode = true (16 cột đầy đủ)
+    // 1. Xuất Excel bảng lương (12 cột chuẩn hoặc 16 cột đầy đủ)
     public byte[] exportCustomEmployeeList(List<Employee> employees, boolean isFullMode) throws Exception {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Bảng Lương");
@@ -49,14 +49,12 @@ public class PayrollExportService {
 
             String[] headers;
             if (!isFullMode) {
-                // 12 Cột chuẩn
                 headers = new String[]{
                         "Họ Và Tên Nhân Viên", "Chức Vụ", "Ngày Tháng Năm Sinh ", "Số CCCD",
                         "Ngày Cấp", "Nơi Cấp ", "Địa Chỉ \n(Trên CCCD)", "Mã Số Thuế",
                         "Số TK", "Ngân Hàng, Chi Nhánh", "Mail", "Số điện thoại"
                 };
             } else {
-                // 16 Cột chi tiết
                 headers = new String[]{
                         "Họ Và Tên Nhân Viên", "Chức Vụ", "Ngày Tháng Năm Sinh ", "Số CCCD",
                         "Ngày Cấp", "Nơi Cấp ", "Địa Chỉ \n(Trên CCCD)", "Mã Số Thuế",
@@ -94,6 +92,45 @@ public class PayrollExportService {
                     row.createCell(14).setCellValue(emp.getFrontIdUrl() != null ? emp.getFrontIdUrl() : "");
                     row.createCell(15).setCellValue(emp.getBackIdUrl() != null ? emp.getBackIdUrl() : "");
                 }
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(out);
+            return out.toByteArray();
+        }
+    }
+
+    // 2. Xuất Excel cho Bảng Đăng Ký Trực Tiếp (Khách tải được luôn)
+    public byte[] exportLiveRegistrations(List<Employee> employees) throws Exception {
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Dang Ky Truc Tiep");
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font font = workbook.createFont();
+            font.setBold(true);
+            headerStyle.setFont(font);
+
+            String[] headers = {"STT", "Họ Và Tên Nhân Viên", "Số Điện Thoại", "Số CCCD", "Cửa Hàng / Điểm Làm Việc", "Chức Vụ", "Ghi Chú (Note)"};
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rowIdx = 1;
+            for (int i = 0; i < employees.size(); i++) {
+                Employee emp = employees.get(i);
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(i + 1);
+                row.createCell(1).setCellValue(emp.getFullName() != null ? emp.getFullName() : "");
+                row.createCell(2).setCellValue(emp.getPhone() != null ? emp.getPhone() : "");
+                row.createCell(3).setCellValue(emp.getIdCardNumber() != null ? emp.getIdCardNumber() : "");
+                row.createCell(4).setCellValue(emp.getWorkplace() != null ? emp.getWorkplace() : "");
+                row.createCell(5).setCellValue(emp.getRole() != null ? emp.getRole() : "SUP");
+                row.createCell(6).setCellValue(emp.getNote() != null ? emp.getNote() : "");
             }
 
             for (int i = 0; i < headers.length; i++) {
