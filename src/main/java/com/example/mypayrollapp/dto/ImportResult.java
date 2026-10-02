@@ -1,11 +1,16 @@
 package com.example.mypayrollapp.dto;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ImportResult {
-    private int totalRows;       // Tổng số dòng đọc được
-    private int successCount;    // Số nhân sự mới được thêm
-    private int duplicateCount;  // Số nhân sự bị trùng CCCD (bỏ qua)
     private String message;
+    private int totalImported;
+    private boolean success;
 }
