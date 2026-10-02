@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Quản Lý & Xuất Bảng Lương</title>
+    <title>Hệ Thống Bảng Lương</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -421,8 +421,8 @@
                 <header class="bg-indigo-900 text-white shadow-md">
                     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-2">
                         <div>
-                            <h1 class="text-xl font-bold">Hệ Thống Quản Lý & Xuất Bảng Lương</h1>
-                            <p class="text-xs text-indigo-300">Tùy biến cột, Kiểm tra Mã Số Thuế & Xuất bảng lương chuẩn mẫu</p>
+                            <h1 class="text-xl font-bold">Hệ Thống Bảng Lương</h1>
+                            <p class="text-xs text-indigo-300">Kiểm tra Mã Số Thuế & Xuất bảng lương</p>
                         </div>
                         <div class="flex items-center space-x-2">
                             <button onClick={() => setActiveTab('muc3')}
@@ -441,7 +441,7 @@
                             </button>
                             <button onClick={() => setActiveTab('backup')}
                                 class={`px-3 py-1.5 rounded-lg text-xs font-bold ${activeTab === 'backup' ? 'bg-teal-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                                💾 Backup
+                                💾 Sao lưu
                             </button>
                         </div>
                     </div>
@@ -494,7 +494,7 @@
                         <div class="space-y-4">
                             <div class="bg-white p-5 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
                                 <div>
-                                    <h2 class="text-lg font-bold">MỤC 3: Danh Sách Nhân Sự Master ({displayPermList.length})</h2>
+                                    <h2 class="text-lg font-bold">MỤC 3: Danh Sách Nhân Sự ({displayPermList.length})</h2>
                                     <p class="text-xs text-gray-500">Quản lý toàn bộ nhân viên. Bạn có thể chọn và đẩy sang Mục 4 để xuất bảng lương.</p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
@@ -510,7 +510,7 @@
                                         const selected = permList.filter(p => selectedPermIds.has(p.id));
                                         exportExcel(selected.length > 0 ? selected : permList);
                                     }} class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-lg text-xs shadow">
-                                        📥 Xuất Excel Chuẩn Form
+                                        📥 Xuất Excel
                                     </button>
                                     <button onClick={() => addToMaster(permList, selectedPermIds)}
                                         disabled={selectedPermIds.size === 0}
@@ -543,7 +543,7 @@
                                     </button>
                                     <button onClick={() => exportExcel(masterList)} disabled={masterList.length === 0}
                                         class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-xs shadow disabled:opacity-40">
-                                        📥 Xuất Excel Chuẩn Form ({masterList.length})
+                                        📥 Xuất Excel ({masterList.length})
                                     </button>
                                     <button onClick={() => { if(window.confirm('Dọn sạch bảng Mục 4?')) setMasterList([]); }}
                                         disabled={masterList.length === 0}
