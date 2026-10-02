@@ -69,7 +69,7 @@ public class PlanController {
     @GetMapping("/{id}/export-payroll")
     public ResponseEntity<byte[]> exportPayroll(@PathVariable Long id) {
         try {
-            byte[] excelBytes = exportService.exportPlanPayroll(id);
+            byte[] excelBytes = exportService.exportWithCustomColumns(id);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=Bang_Luong_Plan_" + id + ".xlsx")
                     .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

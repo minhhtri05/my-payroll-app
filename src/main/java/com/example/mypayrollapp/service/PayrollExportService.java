@@ -20,6 +20,12 @@ public class PayrollExportService {
     private final PlanRepository planRepository;
     private final PlanAssignmentRepository assignmentRepository;
 
+    // 1. Hàm nhận 1 tham số id (Xử lý dứt điểm lỗi Expected 2 arguments but found 1)
+    public byte[] exportWithCustomColumns(Long planId) throws Exception {
+        return exportPlanPayroll(planId);
+    }
+
+    // 2. Xuất theo Plan ID
     public byte[] exportPlanPayroll(Long planId) throws Exception {
         Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy Plan: " + planId));
@@ -37,65 +43,62 @@ public class PayrollExportService {
         return exportCustomEmployeeList(new ArrayList<>(unique.values()), false);
     }
 
-    // 1. Xuất Excel bảng lương (12 cột chuẩn hoặc 16 cột đầy đủ)
-    public byte[] exportCustomEmployeeList(List<Employee> employees, boolean isFullMode) throws Exception {
+    // 3. Hàm nhận 2 tham số: Danh sách nhân sự & Danh sách cột tùy chỉnh
+    public byte[] exportWithCustomColumns(List<Employee> employees, List<Map<String, String>> columns) throws Exception {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Bảng Lương");
 
+            // Header Style: Nền xanh nhạt, chữ đậm, căn giữa, viền mỏng theo ảnh mẫu
             CellStyle headerStyle = workbook.createCellStyle();
-            Font font = workbook.createFont();
-            font.setBold(true);
-            headerStyle.setFont(font);
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setFontName("Arial");
+            headerStyle.setFont(headerFont);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            headerStyle.setFillForegroundColor(IndexedColors.PALE_BLUE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            headerStyle.setWrapText(true);
 
-            String[] headers;
-            if (!isFullMode) {
-                headers = new String[]{
-                        "Họ Và Tên Nhân Viên", "Chức Vụ", "Ngày Tháng Năm Sinh ", "Số CCCD",
-                        "Ngày Cấp", "Nơi Cấp ", "Địa Chỉ \n(Trên CCCD)", "Mã Số Thuế",
-                        "Số TK", "Ngân Hàng, Chi Nhánh", "Mail", "Số điện thoại"
-                };
-            } else {
-                headers = new String[]{
-                        "Họ Và Tên Nhân Viên", "Chức Vụ", "Ngày Tháng Năm Sinh ", "Số CCCD",
-                        "Ngày Cấp", "Nơi Cấp ", "Địa Chỉ \n(Trên CCCD)", "Mã Số Thuế",
-                        "Số TK", "Ngân Hàng, Chi Nhánh", "Mail", "Số điện thoại",
-                        "Nơi Làm Việc", "Tổng Tiền Lương", "Ảnh Mặt Trước CCCD", "Ảnh Mặt Sau CCCD"
-                };
-            }
+            // Data Style: Viền ô
+            CellStyle dataStyle = workbook.createCellStyle();
+            Font dataFont = workbook.createFont();
+            dataFont.setFontName("Arial");
+            dataStyle.setFont(dataFont);
+            dataStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            dataStyle.setBorderTop(BorderStyle.THIN);
+            dataStyle.setBorderBottom(BorderStyle.THIN);
+            dataStyle.setBorderLeft(BorderStyle.THIN);
+            dataStyle.setBorderRight(BorderStyle.THIN);
 
             Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.length; i++) {
+            headerRow.setHeightInPoints(32);
+            for (int i = 0; i < columns.size(); i++) {
                 Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers[i]);
+                cell.setCellValue(columns.get(i).getOrDefault("label", ""));
                 cell.setCellStyle(headerStyle);
             }
 
             int rowIdx = 1;
             for (Employee emp : employees) {
                 Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(emp.getFullName() != null ? emp.getFullName() : "");
-                row.createCell(1).setCellValue(emp.getRole() != null ? emp.getRole() : "SUP");
-                row.createCell(2).setCellValue(emp.getDob() != null ? emp.getDob() : "");
-                row.createCell(3).setCellValue(emp.getIdCardNumber() != null ? emp.getIdCardNumber() : "");
-                row.createCell(4).setCellValue(emp.getIdCardIssuedDate() != null ? emp.getIdCardIssuedDate() : "");
-                row.createCell(5).setCellValue(emp.getIdCardIssuedPlace() != null ? emp.getIdCardIssuedPlace() : "");
-                row.createCell(6).setCellValue(emp.getAddress() != null ? emp.getAddress() : "");
-                row.createCell(7).setCellValue(emp.getTaxCode() != null ? emp.getTaxCode() : "");
-                row.createCell(8).setCellValue(emp.getBankAccountNumber() != null ? emp.getBankAccountNumber() : "");
-                row.createCell(9).setCellValue(emp.getBankInfo() != null ? emp.getBankInfo() : "");
-                row.createCell(10).setCellValue(emp.getEmail() != null ? emp.getEmail() : "");
-                row.createCell(11).setCellValue(emp.getPhone() != null ? emp.getPhone() : "");
-
-                if (isFullMode) {
-                    row.createCell(12).setCellValue(emp.getWorkplace() != null ? emp.getWorkplace() : "");
-                    row.createCell(13).setCellValue(emp.getTotalSalary() != null ? emp.getTotalSalary() : "");
-                    row.createCell(14).setCellValue(emp.getFrontIdUrl() != null ? emp.getFrontIdUrl() : "");
-                    row.createCell(15).setCellValue(emp.getBackIdUrl() != null ? emp.getBackIdUrl() : "");
+                row.setHeightInPoints(22);
+                for (int colIdx = 0; colIdx < columns.size(); colIdx++) {
+                    String key = columns.get(colIdx).getOrDefault("key", "");
+                    String val = getEmployeeFieldValue(emp, key);
+                    Cell cell = row.createCell(colIdx);
+                    cell.setCellValue(val);
+                    cell.setCellStyle(dataStyle);
                 }
             }
 
-            for (int i = 0; i < headers.length; i++) {
+            for (int i = 0; i < columns.size(); i++) {
                 sheet.autoSizeColumn(i);
+                sheet.setColumnWidth(i, Math.max(sheet.getColumnWidth(i) + 1200, 3500));
             }
 
             workbook.write(out);
@@ -103,42 +106,70 @@ public class PayrollExportService {
         }
     }
 
-    // 2. Xuất Excel cho Bảng Đăng Ký Trực Tiếp (Khách tải được luôn)
-    public byte[] exportLiveRegistrations(List<Employee> employees) throws Exception {
-        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("Dang Ky Truc Tiep");
-            CellStyle headerStyle = workbook.createCellStyle();
-            Font font = workbook.createFont();
-            font.setBold(true);
-            headerStyle.setFont(font);
+    // 4. Hàm tương thích xuất 12 cột hoặc 16 cột
+    public byte[] exportCustomEmployeeList(List<Employee> employees, boolean isFullMode) throws Exception {
+        List<Map<String, String>> cols = isFullMode ? getAllColumns() : getDefaultColumns();
+        return exportWithCustomColumns(employees, cols);
+    }
 
-            String[] headers = {"STT", "Họ Và Tên Nhân Viên", "Số Điện Thoại", "Số CCCD", "Cửa Hàng / Điểm Làm Việc", "Chức Vụ", "Ghi Chú (Note)"};
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.length; i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers[i]);
-                cell.setCellStyle(headerStyle);
-            }
+    private List<Map<String, String>> getDefaultColumns() {
+        return List.of(
+                Map.of("key", "fullName", "label", "Họ Và Tên Nhân Viên"),
+                Map.of("key", "role", "label", "Chức Vụ"),
+                Map.of("key", "dob", "label", "Ngày Tháng Năm Sinh"),
+                Map.of("key", "idCardNumber", "label", "Số CCCD"),
+                Map.of("key", "idCardIssuedDate", "label", "Ngày Cấp"),
+                Map.of("key", "idCardIssuedPlace", "label", "Nơi Cấp"),
+                Map.of("key", "address", "label", "Địa Chỉ (Trên CCCD)"),
+                Map.of("key", "taxCode", "label", "Mã Số Thuế"),
+                Map.of("key", "bankAccountNumber", "label", "Số TK"),
+                Map.of("key", "bankInfo", "label", "Ngân Hàng, Chi Nhánh"),
+                Map.of("key", "email", "label", "Mail"),
+                Map.of("key", "phone", "label", "Số điện thoại")
+        );
+    }
 
-            int rowIdx = 1;
-            for (int i = 0; i < employees.size(); i++) {
-                Employee emp = employees.get(i);
-                Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(i + 1);
-                row.createCell(1).setCellValue(emp.getFullName() != null ? emp.getFullName() : "");
-                row.createCell(2).setCellValue(emp.getPhone() != null ? emp.getPhone() : "");
-                row.createCell(3).setCellValue(emp.getIdCardNumber() != null ? emp.getIdCardNumber() : "");
-                row.createCell(4).setCellValue(emp.getWorkplace() != null ? emp.getWorkplace() : "");
-                row.createCell(5).setCellValue(emp.getRole() != null ? emp.getRole() : "SUP");
-                row.createCell(6).setCellValue(emp.getNote() != null ? emp.getNote() : "");
-            }
+    private List<Map<String, String>> getAllColumns() {
+        return List.of(
+                Map.of("key", "fullName", "label", "Họ Và Tên Nhân Viên"),
+                Map.of("key", "role", "label", "Chức Vụ"),
+                Map.of("key", "dob", "label", "Ngày Tháng Năm Sinh"),
+                Map.of("key", "idCardNumber", "label", "Số CCCD"),
+                Map.of("key", "idCardIssuedDate", "label", "Ngày Cấp"),
+                Map.of("key", "idCardIssuedPlace", "label", "Nơi Cấp"),
+                Map.of("key", "address", "label", "Địa Chỉ (Trên CCCD)"),
+                Map.of("key", "taxCode", "label", "Mã Số Thuế"),
+                Map.of("key", "bankAccountNumber", "label", "Số TK"),
+                Map.of("key", "bankInfo", "label", "Ngân Hàng, Chi Nhánh"),
+                Map.of("key", "email", "label", "Mail"),
+                Map.of("key", "phone", "label", "Số điện thoại"),
+                Map.of("key", "totalSalary", "label", "Tổng Lương"),
+                Map.of("key", "note", "label", "Ghi Chú"),
+                Map.of("key", "frontIdUrl", "label", "Ảnh Mặt Trước CCCD"),
+                Map.of("key", "backIdUrl", "label", "Ảnh Mặt Sau CCCD")
+        );
+    }
 
-            for (int i = 0; i < headers.length; i++) {
-                sheet.autoSizeColumn(i);
-            }
-
-            workbook.write(out);
-            return out.toByteArray();
-        }
+    private String getEmployeeFieldValue(Employee emp, String key) {
+        if (emp == null || key == null) return "";
+        return switch (key) {
+            case "fullName" -> emp.getFullName() != null ? emp.getFullName() : "";
+            case "role" -> emp.getRole() != null ? emp.getRole() : "";
+            case "dob" -> emp.getDob() != null ? emp.getDob() : "";
+            case "idCardNumber" -> emp.getIdCardNumber() != null ? emp.getIdCardNumber() : "";
+            case "idCardIssuedDate" -> emp.getIdCardIssuedDate() != null ? emp.getIdCardIssuedDate() : "";
+            case "idCardIssuedPlace" -> emp.getIdCardIssuedPlace() != null ? emp.getIdCardIssuedPlace() : "";
+            case "address" -> emp.getAddress() != null ? emp.getAddress() : "";
+            case "taxCode" -> emp.getTaxCode() != null ? emp.getTaxCode() : "";
+            case "bankAccountNumber" -> emp.getBankAccountNumber() != null ? emp.getBankAccountNumber() : "";
+            case "bankInfo" -> emp.getBankInfo() != null ? emp.getBankInfo() : "";
+            case "email" -> emp.getEmail() != null ? emp.getEmail() : "";
+            case "phone" -> emp.getPhone() != null ? emp.getPhone() : "";
+            case "totalSalary" -> emp.getTotalSalary() != null ? emp.getTotalSalary() : "";
+            case "note" -> emp.getNote() != null ? emp.getNote() : "";
+            case "frontIdUrl" -> emp.getFrontIdUrl() != null ? emp.getFrontIdUrl() : "";
+            case "backIdUrl" -> emp.getBackIdUrl() != null ? emp.getBackIdUrl() : "";
+            default -> "";
+        };
     }
 }
