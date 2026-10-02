@@ -42,8 +42,11 @@
         const [selectedPermIds, setSelectedPermIds] = useState(new Set());
         const [selectedTrashIds, setSelectedTrashIds] = useState(new Set());
 
+        // Bộ lọc chỉ xem ai chưa có MST
+        const [filterMissingTax, setFilterMissingTax] = useState(false);
+
         const [columns, setColumns] = useState(() => {
-            const saved = localStorage.getItem('payroll_custom_columns_v5');
+            const saved = localStorage.getItem('payroll_custom_columns_v6');
             if (saved) {
                 try { return JSON.parse(saved); } catch (e) {}
             }
@@ -51,11 +54,8 @@
         });
 
         const [showColModal, setShowColModal] = useState(false);
-
-        // Modal Chỉnh sửa trực tiếp
         const [editingEmp, setEditingEmp] = useState(null);
 
-        // Modal Thêm tay
         const [showManualModal, setShowManualModal] = useState(false);
         const [manualForm, setManualForm] = useState({
             fullName: '', role: 'SUP', dob: '', idCardNumber: '',
@@ -72,7 +72,7 @@
         }, []);
 
         useEffect(() => {
-            localStorage.setItem('payroll_custom_columns_v5', JSON.stringify(columns));
+            localStorage.setItem('payroll_custom_columns_v6', JSON.stringify(columns));
         }, [columns]);
 
         const fetchEmployees = async () => {
@@ -110,7 +110,40 @@
 
         const activeColumns = columns.filter(c => c.enabled);
 
-        // Lưu Chỉnh sửa trực tiếp vào DB
+        // Mở trang tra cứu MST chính thức theo số CCCD
+        const lookupTaxCode = (idCardNumber) => {
+            if (!idCardNumber) {
+                setAlert({ type: 'error', msg: 'Nhân sự này chưa có số CCCD để tra cứu!' });
+                return;
+            }
+            const cleanId = idCardNumber.trim().replaceAll(/[^0-9]/g, '');
+            // Mở trang tra cứu Masothue hoặc Thuedientu
+            window.open(`https://masothue.com/Search/?q=${cleanId}&type=auto`, '_blank');
+        };
+
+        // Tự động gán MST = CCCD cho tất cả nhân sự đang bị trống MST
+        const autoFillTaxFromIdCard = async () => {
+            const missingList = permList.filter(e => !e.taxCode || e.taxCode.trim() === '');
+            if (missingList.length === 0) {
+                setAlert({ type: 'success', msg: 'Tất cả nhân sự đều đã có Mã Số Thuế!' });
+                return;
+            }
+            if (!window.confirm(`Tìm thấy ${missingList.length} nhân sự chưa có MST. Bạn có muốn tự động gán Mã Số Thuế bằng chính Số CCCD theo chuẩn quy định mới?`)) return;
+
+            try {
+                for (const emp of missingList) {
+                    const cleanId = emp.idCardNumber ? emp.idCardNumber.trim().replaceAll(/[^0-9]/g, '') : '';
+                    if (cleanId) {
+                        await axios.post(`/api/employees/${emp.id}`, { ...emp, taxCode: cleanId });
+                    }
+                }
+                setAlert({ type: 'success', msg: `Đã tự động bổ sung MST cho ${missingList.length} nhân sự thành công!` });
+                fetchEmployees();
+            } catch (err) {
+                setAlert({ type: 'error', msg: 'Lỗi khi gán MST: ' + err.message });
+            }
+        };
+
         const handleSaveEdit = async (e) => {
             e.preventDefault();
             try {
@@ -126,7 +159,6 @@
             }
         };
 
-        // Xuất Excel
         const exportExcel = async (listToExport) => {
             if (listToExport.length === 0) {
                 setAlert({ type: 'error', msg: 'Danh sách xuất trống!' });
@@ -149,7 +181,6 @@
             } catch (err) { setAlert({ type: 'error', msg: 'Lỗi xuất Excel: ' + err.message }); }
         };
 
-        // Thêm tay
         const handleManualSubmit = async (e) => {
             e.preventDefault();
             try {
@@ -170,7 +201,6 @@
             }
         };
 
-        // Import Excel
         const handleUploadExcel = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -180,10 +210,15 @@
                 const res = await axios.post('/api/employees/import-excel', formData);
                 setAlert({ type: 'success', msg: res.data.message });
                 fetchEmployees();
-            } catch (err) { setAlert({ type: 'error', msg: 'Lỗi import: ' + err.message }); }
+            } catch (err) {
+                let msg = 'Lỗi import: ' + err.message;
+                if (err.response && err.response.data) {
+                    msg = typeof err.response.data === 'string' ? err.response.data : (err.response.data.message || JSON.stringify(err.response.data));
+                }
+                setAlert({ type: 'error', msg });
+            }
         };
 
-        // Xóa mềm
         const handleSoftDelete = async (selectedIds, refreshFunc, setSelectFunc) => {
             if (selectedIds.size === 0) return;
             if (!window.confirm(`Chuyển ${selectedIds.size} nhân sự vào Thùng rác?`)) return;
@@ -196,7 +231,6 @@
             } catch (err) { setAlert({ type: 'error', msg: err.message }); }
         };
 
-        // Khôi phục
         const handleRestore = async () => {
             if (selectedTrashIds.size === 0) return;
             try {
@@ -208,7 +242,6 @@
             } catch (err) { setAlert({ type: 'error', msg: err.message }); }
         };
 
-        // Xóa vĩnh viễn
         const handleHardDelete = async () => {
             if (selectedTrashIds.size === 0) return;
             if (!window.confirm(`XÓA VĨNH VIỄN ${selectedTrashIds.size} nhân sự?`)) return;
@@ -260,7 +293,13 @@
             return emp[key] || '-';
         };
 
-        // Bảng render dữ liệu
+        // Lọc danh sách theo tùy chọn thiếu MST
+        const displayPermList = filterMissingTax
+            ? permList.filter(e => !e.taxCode || e.taxCode.trim() === '')
+            : permList;
+
+        const missingTaxCount = permList.filter(e => !e.taxCode || e.taxCode.trim() === '').length;
+
         const renderTable = (items, selectedSet, setFunc, isMasterTab = false) => (
             <div class="overflow-x-auto border rounded-xl shadow-sm bg-white">
                 <table class="min-w-full divide-y divide-gray-200 text-xs text-left">
@@ -325,11 +364,34 @@
                                 {activeColumns.map(col => (
                                     <td key={col.key} class="p-3 whitespace-nowrap border-r border-gray-100">
                                         {col.key === 'fullName' && <span class="font-bold text-gray-900">{emp.fullName}</span>}
-                                        {col.key === 'idCardNumber' && <span class="font-mono font-bold text-indigo-700">{emp.idCardNumber}</span>}
+                                        {col.key === 'idCardNumber' && (
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="font-mono font-bold text-indigo-700">{emp.idCardNumber}</span>
+                                                <button onClick={(e) => { e.stopPropagation(); lookupTaxCode(emp.idCardNumber); }}
+                                                    title="Bấm để tra cứu Mã Số Thuế cá nhân trên Tổng Cục Thuế"
+                                                    class="text-[10px] bg-slate-100 hover:bg-indigo-100 text-indigo-600 px-1 py-0.5 rounded border border-indigo-200">
+                                                    🔍 Tra MST
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* CHECK MÃ SỐ THUẾ: CẢNH BÁO NẾU THIẾU */}
+                                        {col.key === 'taxCode' && (
+                                            emp.taxCode && emp.taxCode.trim() !== '' ? (
+                                                <span class="font-mono font-bold text-gray-800 bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
+                                                    {emp.taxCode}
+                                                </span>
+                                            ) : (
+                                                <span class="bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded border border-rose-300 text-[10px] inline-flex items-center gap-1">
+                                                    ⚠️ Chưa có MST
+                                                </span>
+                                            )
+                                        )}
+
                                         {col.key === 'bankAccountNumber' && <span class="font-mono font-semibold text-emerald-700">{emp.bankAccountNumber}</span>}
                                         {col.key === 'totalSalary' && <span class="font-bold text-emerald-700">{emp.totalSalary || '-'}</span>}
                                         {col.key === 'note' && <span class="italic text-gray-600">{emp.note || '-'}</span>}
-                                        {['fullName', 'idCardNumber', 'bankAccountNumber', 'totalSalary', 'note'].indexOf(col.key) === -1 && (
+                                        {['fullName', 'idCardNumber', 'taxCode', 'bankAccountNumber', 'totalSalary', 'note'].indexOf(col.key) === -1 && (
                                             <span>{getVal(emp, col.key)}</span>
                                         )}
                                     </td>
@@ -345,7 +407,7 @@
                         ))}
                         {items.length === 0 && (
                             <tr>
-                                <td colspan={activeColumns.length + 4} class="p-8 text-center text-gray-400">Chưa có dữ liệu nào.</td>
+                                <td colspan={activeColumns.length + 4} class="p-8 text-center text-gray-400">Chưa có dữ liệu nào phù hợp.</td>
                             </tr>
                         )}
                     </tbody>
@@ -360,7 +422,7 @@
                     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-2">
                         <div>
                             <h1 class="text-xl font-bold">Hệ Thống Quản Lý & Xuất Bảng Lương</h1>
-                            <p class="text-xs text-indigo-300">Chỉnh sửa trực tiếp, Di chuyển cột & Xuất form bảng lương</p>
+                            <p class="text-xs text-indigo-300">Tùy biến cột, Kiểm tra Mã Số Thuế & Xuất bảng lương chuẩn mẫu</p>
                         </div>
                         <div class="flex items-center space-x-2">
                             <button onClick={() => setActiveTab('muc3')}
@@ -396,13 +458,26 @@
                 )}
 
                 <main class="max-w-7xl mx-auto px-4 py-5 flex-1 w-full space-y-6">
-                    {/* THANH ĐIỀU HƯỚNG TÙY BIẾN CỘT */}
+                    {/* THANH ĐIỀU HƯỚNG TÙY BIẾN CỘT & CÔNG CỤ CHECK THUẾ */}
                     <div class="bg-indigo-50 border border-indigo-200 p-3 rounded-xl flex flex-wrap justify-between items-center gap-2 text-xs">
                         <div class="flex items-center gap-2">
-                            <span class="font-bold text-indigo-900">💡 Mẹo:</span>
-                            <span class="text-gray-600">Bấm nút <b>✏️ Sửa</b> hoặc <b>nhấp đúp chuột</b> vào bất kỳ dòng nào để chỉnh sửa trực tiếp thông tin!</span>
+                            <span class="font-bold text-indigo-900">📌 Công cụ kiểm tra:</span>
+                            <span class="text-gray-600">
+                                Đang có <b class={missingTaxCount > 0 ? 'text-rose-600' : 'text-emerald-700'}>{missingTaxCount}</b> nhân sự chưa có Mã Số Thuế.
+                            </span>
                         </div>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onClick={() => setFilterMissingTax(!filterMissingTax)}
+                                class={`px-3 py-1.5 rounded-lg font-bold shadow transition ${filterMissingTax ? 'bg-rose-600 text-white' : 'bg-white hover:bg-rose-50 text-rose-700 border border-rose-300'}`}>
+                                {filterMissingTax ? '👁️ Hiện tất cả' : `⚠️ Lọc ai chưa có MST (${missingTaxCount})`}
+                            </button>
+
+                            <button onClick={autoFillTaxFromIdCard}
+                                title="Tự động gán Số CCCD vào ô Mã Số Thuế theo quy định chuẩn hóa mới của Tổng Cục Thuế"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg shadow">
+                                ⚡ Gán MST = CCCD cho ai thiếu
+                            </button>
+
                             <button onClick={() => setShowColModal(true)}
                                 class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg shadow">
                                 ⚙️ Sắp Xếp & Chọn Cột ({activeColumns.length}/{columns.length})
@@ -419,7 +494,7 @@
                         <div class="space-y-4">
                             <div class="bg-white p-5 rounded-xl shadow-sm border flex flex-wrap justify-between items-center gap-3">
                                 <div>
-                                    <h2 class="text-lg font-bold">MỤC 3: Danh Sách Nhân Sự Master ({permList.length})</h2>
+                                    <h2 class="text-lg font-bold">MỤC 3: Danh Sách Nhân Sự Master ({displayPermList.length})</h2>
                                     <p class="text-xs text-gray-500">Quản lý toàn bộ nhân viên. Bạn có thể chọn và đẩy sang Mục 4 để xuất bảng lương.</p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
@@ -449,7 +524,7 @@
                                     </button>
                                 </div>
                             </div>
-                            {renderTable(permList, selectedPermIds, setSelectedPermIds, false)}
+                            {renderTable(displayPermList, selectedPermIds, setSelectedPermIds, false)}
                         </div>
                     )}
 
@@ -545,7 +620,7 @@
                     )}
                 </main>
 
-                {/* MODAL CHỈNH SỬA TRỰC TIẾP DỮ LIỆU */}
+                {/* MODAL CHỈNH SỬA TRỰC TIẾP */}
                 {editingEmp && (
                     <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                         <div class="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -577,7 +652,13 @@
                                         onChange={e => setEditingEmp({...editingEmp, dob: e.target.value})} class="w-full border rounded p-2" />
                                 </div>
                                 <div>
-                                    <label class="font-semibold block mb-1">Số CCCD *</label>
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="font-semibold block">Số CCCD *</label>
+                                        <button type="button" onClick={() => lookupTaxCode(editingEmp.idCardNumber)}
+                                            class="text-indigo-600 hover:underline font-bold text-[11px]">
+                                            🔍 Tra cứu MST
+                                        </button>
+                                    </div>
                                     <input type="text" required value={editingEmp.idCardNumber || ''}
                                         onChange={e => setEditingEmp({...editingEmp, idCardNumber: e.target.value})} class="w-full border rounded p-2 font-mono font-bold text-indigo-700" />
                                 </div>
@@ -600,8 +681,14 @@
                                         onChange={e => setEditingEmp({...editingEmp, address: e.target.value})} class="w-full border rounded p-2" />
                                 </div>
                                 <div>
-                                    <label class="font-semibold block mb-1">Mã Số Thuế</label>
-                                    <input type="text" value={editingEmp.taxCode || ''}
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="font-semibold block">Mã Số Thuế</label>
+                                        <button type="button" onClick={() => setEditingEmp({...editingEmp, taxCode: editingEmp.idCardNumber ? editingEmp.idCardNumber.trim().replaceAll(/[^0-9]/g, '') : ''})}
+                                            class="text-emerald-700 hover:underline font-bold text-[11px]">
+                                            ⚡ Lấy theo CCCD
+                                        </button>
+                                    </div>
+                                    <input type="text" value={editingEmp.taxCode || ''} placeholder="Nhập MST..."
                                         onChange={e => setEditingEmp({...editingEmp, taxCode: e.target.value})} class="w-full border rounded p-2 font-mono" />
                                 </div>
                                 <div>
